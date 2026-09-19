@@ -5,9 +5,6 @@ import {
   Network,
   Code2,
   AlertCircle,
-  Clock,
-  Layers,
-  CheckCircle2,
 } from "lucide-react";
 import { Header } from "./components/Header";
 import { UploadSection } from "./components/UploadSection";
@@ -16,13 +13,16 @@ import { TextTab } from "./components/TextTab";
 import { TablesTab } from "./components/TablesTab";
 import { StructureTab } from "./components/StructureTab";
 import { RawJsonTab } from "./components/RawJsonTab";
-import { ParseApiResponse, RhwpCapabilities } from "./types";
+import { ParseApiResponse, RhwpCapabilities, RhwpStatusResponse } from "./types";
 
 type MainTab = "text" | "tables" | "structure" | "json";
 
 export default function App() {
+  const [connected, setConnected] = useState<boolean>(false);
   const [rhwpVersion, setRhwpVersion] = useState<string | null>(null);
+  const [binary, setBinary] = useState<string | null>(null);
   const [capabilities, setCapabilities] = useState<RhwpCapabilities | null>(null);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const [loadingCapabilities, setLoadingCapabilities] = useState<boolean>(true);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -34,27 +34,75 @@ export default function App() {
 
   // Fetch initial CLI status & capabilities
   useEffect(() => {
-    async function fetchStatus() {
+    let isMounted = true;
+
+    async function fetchStatus(retryCount = 0) {
       try {
-        setLoadingCapabilities(true);
-        const res = await fetch("/api/rhwp/status");
-        if (!res.ok) {
-          throw new Error(`서버 응답 오류 (HTTP ${res.status})`);
+        if (retryCount === 0) {
+          setLoadingCapabilities(true);
         }
-        const data = await res.json();
-        if (data.success) {
-          setRhwpVersion(data.version);
-          setCapabilities(data.capabilities);
+
+        const res = await fetch("/api/rhwp/status", {
+          headers: { Accept: "application/json" },
+        });
+
+        // Defensive check: verify content-type is JSON
+        const contentType = res.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) {
+          // If proxy or server warmup returned HTML, retry up to 3 times before setting error
+          if (retryCount < 3) {
+            setTimeout(() => {
+              if (isMounted) fetchStatus(retryCount + 1);
+            }, 1500);
+            return;
+          }
+
+          if (isMounted) {
+            setConnected(false);
+            setRhwpVersion(null);
+            setCapabilities(null);
+            setConnectionError("서버 응답을 기다리는 중입니다. 잠시 후 새로고침해주세요.");
+          }
+          return;
+        }
+
+        const data: RhwpStatusResponse = await res.json();
+
+        if (isMounted) {
+          if (data.connected) {
+            setConnected(true);
+            setRhwpVersion(data.version || null);
+            setBinary(data.binary || null);
+            setCapabilities(data.capabilities || null);
+            setConnectionError(null);
+          } else {
+            setConnected(false);
+            setRhwpVersion(null);
+            setBinary(data.binary || null);
+            setCapabilities(null);
+            setConnectionError(data.error || "rhwp CLI 실행파일을 찾을 수 없습니다.");
+          }
         }
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
-        console.error("rhwp 상태 로드 실패:", message);
+        if (isMounted) {
+          setConnected(false);
+          setRhwpVersion(null);
+          setCapabilities(null);
+          setConnectionError(`rhwp 상태 확인 실패: ${message}`);
+        }
       } finally {
-        setLoadingCapabilities(false);
+        if (isMounted && retryCount === 0) {
+          setLoadingCapabilities(false);
+        }
       }
     }
 
     fetchStatus();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleFileSelect = (file: File) => {
@@ -63,6 +111,10 @@ export default function App() {
   };
 
   const handleParse = async () => {
+    if (!connected) {
+      setParseError("rhwp CLI가 서버에 설치되어 있지 않습니다.");
+      return;
+    }
     if (!selectedFile) return;
 
     try {
@@ -74,8 +126,14 @@ export default function App() {
 
       const response = await fetch("/api/parse", {
         method: "POST",
+        headers: { Accept: "application/json" },
         body: formData,
       });
+
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        throw new Error("서버에서 올바른 JSON 응답을 받지 못했습니다. 잠시 후 다시 시도해주세요.");
+      }
 
       const data = await response.json();
 
@@ -100,6 +158,11 @@ export default function App() {
   };
 
   const handleParseSample = async (type: "hwp" | "hwpx") => {
+    if (!connected) {
+      setParseError("rhwp CLI가 서버에 설치되어 있지 않습니다.");
+      return;
+    }
+
     try {
       setIsParsing(true);
       setParseError(null);
@@ -107,7 +170,13 @@ export default function App() {
 
       const response = await fetch(`/api/parse-sample?type=${type}`, {
         method: "POST",
+        headers: { Accept: "application/json" },
       });
+
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        throw new Error("서버에서 올바른 JSON 응답을 받지 못했습니다. 잠시 후 다시 시도해주세요.");
+      }
 
       const data = await response.json();
 
@@ -162,7 +231,9 @@ export default function App() {
     <div className="min-h-screen bg-stone-100/70 text-stone-900 flex flex-col font-sans antialiased">
       {/* Top App Header */}
       <Header
+        connected={connected}
         rhwpVersion={rhwpVersion}
+        binary={binary}
         capabilities={capabilities}
         loadingCapabilities={loadingCapabilities}
       />
@@ -171,6 +242,9 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
         {/* Upload & Action Section */}
         <UploadSection
+          connected={connected}
+          connectionError={connectionError}
+          binary={binary}
           selectedFile={selectedFile}
           onFileSelect={handleFileSelect}
           onParse={handleParse}
@@ -310,7 +384,9 @@ export default function App() {
             HWP/HWPX Parser Quality Verification App • TASK 01
           </span>
           <span className="font-mono text-stone-400">
-            Powered by rhwp {rhwpVersion || "v0.8.6"} CLI • No AI / LLM
+            {connected && rhwpVersion
+              ? `Powered by rhwp ${rhwpVersion} CLI • No AI / LLM`
+              : "rhwp CLI 미연결 • No AI / LLM"}
           </span>
         </div>
       </footer>

@@ -1,15 +1,19 @@
 import React from "react";
-import { FileText, CheckCircle2, AlertCircle, Terminal, ShieldCheck } from "lucide-react";
+import { FileText, CheckCircle2, Terminal, ShieldCheck } from "lucide-react";
 import { RhwpCapabilities } from "../types";
 
 interface HeaderProps {
+  connected: boolean;
   rhwpVersion: string | null;
+  binary: string | null;
   capabilities: RhwpCapabilities | null;
   loadingCapabilities: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
+  connected,
   rhwpVersion,
+  binary,
   capabilities,
   loadingCapabilities,
 }) => {
@@ -37,18 +41,32 @@ export const Header: React.FC<HeaderProps> = ({
 
         <div className="flex flex-wrap items-center gap-2 text-xs">
           {/* CLI Engine Status Badge */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-stone-100 border border-stone-200 text-stone-700">
-            <Terminal className="w-3.5 h-3.5 text-stone-600" />
-            <span className="text-stone-500">엔진:</span>
-            <span className="font-mono font-semibold text-stone-900">
-              {loadingCapabilities ? "확인 중..." : rhwpVersion || "rhwp 미연결"}
-            </span>
-            {rhwpVersion && rhwpVersion !== "unknown" ? (
-              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" title="CLI 정상" />
-            ) : (
-              <span className="inline-block w-2 h-2 rounded-full bg-red-500" title="CLI 오류" />
-            )}
-          </div>
+          {loadingCapabilities ? (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-stone-100 border border-stone-200 text-stone-700">
+              <Terminal className="w-3.5 h-3.5 text-stone-500 animate-pulse" />
+              <span className="font-mono text-stone-600">rhwp 연결 확인 중...</span>
+            </div>
+          ) : connected ? (
+            <div
+              id="rhwp-status-connected"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 font-medium"
+              title={`바이너리: ${binary || "PATH"}`}
+            >
+              <span className="text-sm">🟢</span>
+              <span className="font-mono font-semibold">
+                {rhwpVersion || "rhwp"} 연결됨
+              </span>
+            </div>
+          ) : (
+            <div
+              id="rhwp-status-disconnected"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-red-50 border border-red-200 text-red-800 font-medium"
+              title={`시도된 바이너리: ${binary || "rhwp"}`}
+            >
+              <span className="text-sm">🔴</span>
+              <span className="font-semibold">rhwp CLI 미연결</span>
+            </div>
+          )}
 
           {/* Supported Formats Badge */}
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-stone-50 border border-stone-200 text-stone-600">

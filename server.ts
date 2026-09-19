@@ -4,8 +4,9 @@ import fs from "fs";
 import multer from "multer";
 import { createServer as createViteServer } from "vite";
 import {
-  getRhwpVersion,
-  getRhwpCapabilities,
+  checkRhwpConnection,
+  runRhwpSelfTest,
+  getRhwpBinary,
   parseHwpFile,
 } from "./server/rhwp.ts";
 
@@ -28,7 +29,6 @@ const storage = multer.diskStorage({
     cb(null, uploadDir);
   },
   filename: (_req, file, cb) => {
-    // Preserve extension safely
     const ext = path.extname(file.originalname);
     cb(null, `doc_${Date.now()}${ext}`);
   },
@@ -56,20 +56,36 @@ app.get("/api/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
-// Query rhwp version & capabilities
+// Query rhwp connection status
+// Note: We return HTTP 200 with { success: false, connected: false } when disconnected,
+// because reverse proxies (such as Nginx error_page 502 503 504 = /warmup.html) intercept
+// HTTP 503 and return HTML ("<!doctype html>"), which breaks client-side JSON parsing.
 app.get("/api/rhwp/status", async (_req, res) => {
   try {
-    const version = await getRhwpVersion();
-    const capabilities = await getRhwpCapabilities();
-    res.json({
-      success: true,
-      version,
-      capabilities,
-    });
+    const status = await checkRhwpConnection();
+    if (status.connected) {
+      return res.json({
+        success: true,
+        connected: true,
+        binary: status.binary,
+        version: status.version,
+        capabilities: status.capabilities,
+      });
+    } else {
+      return res.json({
+        success: false,
+        connected: false,
+        binary: status.binary,
+        error: status.error || "rhwp CLI 실행파일을 찾을 수 없습니다.",
+        errorCode: status.errorCode,
+      });
+    }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    res.status(500).json({
+    return res.json({
       success: false,
+      connected: false,
+      binary: getRhwpBinary(),
       error: `rhwp 상태 확인 실패: ${message}`,
     });
   }
@@ -77,6 +93,18 @@ app.get("/api/rhwp/status", async (_req, res) => {
 
 // Parse uploaded HWP/HWPX file
 app.post("/api/parse", upload.single("file"), async (req, res) => {
+  // Pre-check rhwp connection
+  const connStatus = await checkRhwpConnection();
+  if (!connStatus.connected) {
+    return res.status(400).json({
+      success: false,
+      connected: false,
+      binary: connStatus.binary,
+      error: connStatus.error || "rhwp CLI가 서버에 설치되어 있지 않습니다.",
+      errorCode: connStatus.errorCode,
+    });
+  }
+
   if (!req.file) {
     return res.status(400).json({
       success: false,
@@ -112,6 +140,18 @@ app.post("/api/parse", upload.single("file"), async (req, res) => {
 
 // Sample file parser endpoint for quick validation
 app.post("/api/parse-sample", async (req, res) => {
+  // Pre-check rhwp connection
+  const connStatus = await checkRhwpConnection();
+  if (!connStatus.connected) {
+    return res.status(400).json({
+      success: false,
+      connected: false,
+      binary: connStatus.binary,
+      error: connStatus.error || "rhwp CLI가 서버에 설치되어 있지 않습니다.",
+      errorCode: connStatus.errorCode,
+    });
+  }
+
   const type = req.query.type === "hwpx" ? "hwpx" : "hwp";
   const samplePath = path.resolve(
     process.cwd(),
@@ -164,6 +204,9 @@ app.use((err: unknown, _req: express.Request, res: express.Response, next: expre
 
 // Setup Vite or static serving
 async function startServer() {
+  // Run rhwp startup self-test
+  await runRhwpSelfTest();
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },

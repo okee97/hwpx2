@@ -23,13 +23,25 @@ export interface RhwpCapabilities {
 
 export interface RhwpExecutionResult<T = unknown> {
   command: string[];
-  exitCode: number;
+  binary?: string;
+  exitCode: number | string;
   stdout: string;
   stderr: string;
   durationMs: number;
   success: boolean;
   data: T | null;
   error?: string;
+  errorCode?: string;
+}
+
+export interface RhwpStatusResponse {
+  success: boolean;
+  connected: boolean;
+  binary: string;
+  version?: string | null;
+  capabilities?: RhwpCapabilities | null;
+  error?: string;
+  errorCode?: string;
 }
 
 export interface RhwpInfoData {
@@ -119,13 +131,15 @@ export interface RhwpStructureData {
 
 export interface ParseApiResponse {
   success: boolean;
+  connected?: boolean;
   file: {
     name: string;
     format: string;
     size: number;
   };
   rhwp: {
-    version: string;
+    binary: string;
+    version: string | null;
     capabilities: RhwpCapabilities | null;
   };
   info: RhwpInfoData | null;

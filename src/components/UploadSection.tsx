@@ -6,12 +6,16 @@ import {
   CheckCircle,
   XCircle,
   Play,
-  Sparkles,
   FileCode2,
+  AlertTriangle,
+  Ban,
 } from "lucide-react";
 import { ParseApiResponse } from "../types";
 
 interface UploadSectionProps {
+  connected: boolean;
+  connectionError?: string | null;
+  binary?: string | null;
   selectedFile: File | null;
   onFileSelect: (file: File) => void;
   onParse: () => void;
@@ -22,6 +26,9 @@ interface UploadSectionProps {
 }
 
 export const UploadSection: React.FC<UploadSectionProps> = ({
+  connected,
+  connectionError,
+  binary,
   selectedFile,
   onFileSelect,
   onParse,
@@ -91,6 +98,36 @@ export const UploadSection: React.FC<UploadSectionProps> = ({
 
   return (
     <div className="bg-white rounded-xl border border-stone-200 shadow-xs p-5 sm:p-6 mb-6">
+      {/* CLI Disconnected Warning Banner */}
+      {!connected && (
+        <div
+          id="rhwp-disconnected-alert"
+          className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-red-900 shadow-xs"
+        >
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="text-sm font-bold text-red-950">
+                rhwp CLI가 서버에 설치되어 있지 않습니다.
+              </h3>
+              <p className="text-xs text-red-800 mt-1 leading-relaxed">
+                {connectionError || "서버 환경에서 rhwp 실행파일을 찾을 수 없습니다."}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-mono">
+                <span className="text-red-700 font-sans">시도된 바이너리:</span>
+                <code className="bg-red-100/80 px-2 py-0.5 rounded text-red-950 font-bold">
+                  {binary || "rhwp"}
+                </code>
+                <span className="text-stone-400">•</span>
+                <span className="text-red-700 font-sans">
+                  .env의 RHWP_BIN 설정 또는 PATH 등록이 필요합니다.
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
         {/* Upload & Drag Drop Area */}
         <div className="lg:col-span-7">
@@ -156,8 +193,9 @@ export const UploadSection: React.FC<UploadSectionProps> = ({
                 e.stopPropagation();
                 onParseSample("hwp");
               }}
-              disabled={isParsing}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium transition-colors cursor-pointer disabled:opacity-50"
+              disabled={!connected || isParsing}
+              title={!connected ? "rhwp CLI가 서버에 설치되어 있지 않습니다." : undefined}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <FileCode2 className="w-3.5 h-3.5 text-stone-500" />
               <span>sample_table.hwp (1,000행 표)</span>
@@ -169,8 +207,9 @@ export const UploadSection: React.FC<UploadSectionProps> = ({
                 e.stopPropagation();
                 onParseSample("hwpx");
               }}
-              disabled={isParsing}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium transition-colors cursor-pointer disabled:opacity-50"
+              disabled={!connected || isParsing}
+              title={!connected ? "rhwp CLI가 서버에 설치되어 있지 않습니다." : undefined}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <FileCode2 className="w-3.5 h-3.5 text-stone-500" />
               <span>sample_table.hwpx (HWPX)</span>
@@ -213,9 +252,11 @@ export const UploadSection: React.FC<UploadSectionProps> = ({
 
             <div className="col-span-2 p-3 rounded-lg bg-stone-50 border border-stone-200 flex items-center justify-between">
               <div>
-                <span className="text-stone-500 block text-xs">파싱 상태</span>
+                <span className="text-stone-500 block text-xs">파싱 엔진 상태</span>
                 <span className="font-medium text-xs text-stone-800">
-                  {isParsing
+                  {!connected
+                    ? "rhwp CLI 미연결 (파싱 불가)"
+                    : isParsing
                     ? "rhwp CLI 실행 중..."
                     : parseResult
                     ? parseResult.success
@@ -223,11 +264,15 @@ export const UploadSection: React.FC<UploadSectionProps> = ({
                       : "파싱 실패"
                     : parseError
                     ? "오류 발생"
-                    : "파일 선택 대기"}
+                    : "준비 완료 (파일 대기)"}
                 </span>
               </div>
               <div>
-                {isParsing ? (
+                {!connected ? (
+                  <span title="CLI 미연결">
+                    <Ban className="w-5 h-5 text-red-500" />
+                  </span>
+                ) : isParsing ? (
                   <Loader2 className="w-5 h-5 animate-spin text-amber-600" />
                 ) : parseResult ? (
                   parseResult.success ? (
@@ -238,36 +283,51 @@ export const UploadSection: React.FC<UploadSectionProps> = ({
                 ) : parseError ? (
                   <XCircle className="w-5 h-5 text-red-600" />
                 ) : (
-                  <span className="w-2.5 h-2.5 rounded-full bg-stone-300 inline-block" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
                 )}
               </div>
             </div>
           </div>
 
           {/* Parse Start Button */}
-          <button
-            id="btn-start-parsing"
-            type="button"
-            onClick={onParse}
-            disabled={!selectedFile || isParsing}
-            className={`w-full py-3 px-4 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-all shadow-xs cursor-pointer ${
-              !selectedFile || isParsing
-                ? "bg-stone-200 text-stone-400 cursor-not-allowed"
-                : "bg-stone-900 hover:bg-stone-800 text-white active:scale-[0.99]"
-            }`}
-          >
-            {isParsing ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>rhwp 파싱 처리 중...</span>
-              </>
-            ) : (
-              <>
-                <Play className="w-4 h-4 fill-current" />
-                <span>파싱 시작 (rhwp 실행)</span>
-              </>
+          <div>
+            <button
+              id="btn-start-parsing"
+              type="button"
+              onClick={onParse}
+              disabled={!connected || !selectedFile || isParsing}
+              className={`w-full py-3 px-4 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-all shadow-xs ${
+                !connected
+                  ? "bg-stone-200 text-stone-400 cursor-not-allowed border border-stone-300"
+                  : !selectedFile || isParsing
+                  ? "bg-stone-200 text-stone-400 cursor-not-allowed"
+                  : "bg-stone-900 hover:bg-stone-800 text-white active:scale-[0.99] cursor-pointer"
+              }`}
+            >
+              {!connected ? (
+                <>
+                  <Ban className="w-4 h-4 text-red-500" />
+                  <span>rhwp CLI 미연결 (파싱 불가)</span>
+                </>
+              ) : isParsing ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>rhwp 파싱 처리 중...</span>
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4 fill-current" />
+                  <span>파싱 시작 (rhwp 실행)</span>
+                </>
+              )}
+            </button>
+
+            {!connected && (
+              <p className="text-[11px] text-red-600 font-medium text-center mt-2">
+                rhwp CLI가 서버에 설치되어 있지 않습니다.
+              </p>
             )}
-          </button>
+          </div>
         </div>
       </div>
     </div>
