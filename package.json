@@ -11,7 +11,9 @@
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:canonical": "tsx scripts/test-canonical.ts",
+    "test:ai": "tsx scripts/test-ai-metadata.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

@@ -1,6 +1,6 @@
 {
   "name": "HWP/HWPX Parser Web App",
-  "description": "rhwp CLI 기반 HWP 및 HWPX 문서 파싱 품질 검증 웹 애플리케이션",
+  "description": "rhwp CLI 기반 HWP 및 HWPX 문서 파싱 및 LLM용 Canonical Document 정규화 웹 애플리케이션",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

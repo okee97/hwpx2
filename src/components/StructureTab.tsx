@@ -13,8 +13,32 @@ const TreeNodeItem: React.FC<{ node: StructureNode; defaultExpanded: boolean }> 
   const [expanded, setExpanded] = useState(defaultExpanded);
 
   const hasChildren = Boolean(node.children && node.children.length > 0);
-  const title = node.title || node.text || node.number || "(제목 없음)";
+  const rawHeading = (node.heading || node.title || node.text || "").trim();
+  const marker = (node.marker || node.number || "").trim();
+  const kind = (node.kind || "").trim();
   const level = node.level ?? 0;
+  const paraIndex =
+    typeof node.paraIndex === "number"
+      ? node.paraIndex
+      : typeof (node as any).paragraph === "number"
+      ? (node as any).paragraph
+      : undefined;
+  const section =
+    typeof (node as any).section === "number" ? (node as any).section : undefined;
+  const bodies: string[] = Array.isArray(node.body)
+    ? node.body.map(String).filter(Boolean)
+    : [];
+
+  let displayTitle = rawHeading;
+  if (!displayTitle && marker) {
+    displayTitle = marker;
+  }
+  if (!displayTitle && kind) {
+    displayTitle = kind;
+  }
+  if (!displayTitle) {
+    displayTitle = "(제목 없음)";
+  }
 
   return (
     <div className="text-xs">
@@ -43,21 +67,37 @@ const TreeNodeItem: React.FC<{ node: StructureNode; defaultExpanded: boolean }> 
             </span>
           )}
 
-          {node.number && (
-            <span className="font-mono font-semibold text-amber-900 bg-amber-100/70 px-1.5 py-0.2 rounded text-[11px]">
-              {node.number}
+          {kind && (
+            <span className="px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 font-semibold text-[10px] border border-blue-200/60">
+              {kind}
             </span>
           )}
 
-          <span className="text-stone-900 leading-normal break-words">{title}</span>
+          {marker && (
+            <span className="font-mono font-semibold text-amber-900 bg-amber-100/70 px-1.5 py-0.2 rounded text-[11px]">
+              {marker}
+            </span>
+          )}
 
-          {node.paraIndex !== undefined && (
+          <span className="text-stone-900 leading-normal break-words">{displayTitle}</span>
+
+          {(paraIndex !== undefined || section !== undefined) && (
             <span className="text-[10px] text-stone-400 font-mono">
-              (para #{node.paraIndex})
+              ({section !== undefined ? `sec #${section} ` : ""}para #{paraIndex ?? "-"})
             </span>
           )}
         </div>
       </div>
+
+      {bodies.length > 0 && (
+        <div className="pl-6 ml-4 border-l border-stone-200 text-[11px] text-stone-600 italic py-1 space-y-0.5">
+          {bodies.map((b, bIdx) => (
+            <div key={bIdx} className="leading-relaxed text-stone-600">
+              › {b}
+            </div>
+          ))}
+        </div>
+      )}
 
       {hasChildren && expanded && (
         <div className="pl-6 border-l border-stone-200 ml-4 space-y-0.5 mt-0.5">

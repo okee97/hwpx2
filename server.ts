@@ -9,6 +9,13 @@ import {
   getRhwpBinary,
   parseHwpFile,
 } from "./server/rhwp.ts";
+import {
+  buildCanonicalDocument,
+  buildCanonicalMarkdown,
+  buildCanonicalQuality,
+  normalizeUploadFilename,
+} from "./server/canonical.ts";
+import { extractBusinessMetadataFromCanonical } from "./server/gemini-metadata.ts";
 
 const app = express();
 const PORT = 3000;
@@ -114,7 +121,8 @@ app.post("/api/parse", upload.single("file"), async (req, res) => {
 
   const tempFilePath = req.file.path;
   const tempDir = req.file.destination;
-  const originalName = req.file.originalname;
+  const rawOriginalName = req.file.originalname;
+  const originalName = normalizeUploadFilename(rawOriginalName);
   const sizeBytes = req.file.size;
 
   try {
@@ -176,6 +184,76 @@ app.post("/api/parse-sample", async (req, res) => {
     return res.status(500).json({
       success: false,
       error: `샘플 파싱 중 오류: ${message}`,
+    });
+  }
+});
+
+// Canonicalize parse result on-demand
+app.post("/api/canonicalize", (req, res) => {
+  try {
+    const parseResult = req.body;
+    if (!parseResult) {
+      return res.status(400).json({
+        success: false,
+        error: "파싱 결과 데이터가 전달되지 않았습니다.",
+      });
+    }
+
+    const canonical = buildCanonicalDocument(parseResult);
+    const markdown = buildCanonicalMarkdown(canonical);
+    const quality = buildCanonicalQuality(parseResult, canonical, markdown);
+
+    return res.json({
+      success: true,
+      canonical,
+      markdown,
+      quality,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return res.status(500).json({
+      success: false,
+      error: `Canonical Document 생성 실패: ${message}`,
+    });
+  }
+});
+
+// Single-call AI Business Metadata Extraction
+app.post("/api/extract-business-metadata", async (req, res) => {
+  try {
+    const { canonical_markdown } = req.body || {};
+    if (
+      !canonical_markdown ||
+      typeof canonical_markdown !== "string" ||
+      !canonical_markdown.trim()
+    ) {
+      return res.status(400).json({
+        success: false,
+        error: "canonical_markdown이 제공되지 않았습니다.",
+        error_code: "INVALID_INPUT",
+      });
+    }
+
+    const result = await extractBusinessMetadataFromCanonical(canonical_markdown);
+    if (!result.success) {
+      const status =
+        result.error_code === "MISSING_API_KEY"
+          ? 500
+          : result.error_code === "DOCUMENT_TOO_LARGE"
+          ? 413
+          : result.error_code === "INVALID_INPUT"
+          ? 400
+          : 502;
+      return res.status(status).json(result);
+    }
+
+    return res.json(result);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return res.status(500).json({
+      success: false,
+      error: `서버 내부 오류: ${message}`,
+      error_code: "AI_REQUEST_FAILED",
     });
   }
 });

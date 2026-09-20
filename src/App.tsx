@@ -5,6 +5,7 @@ import {
   Network,
   Code2,
   AlertCircle,
+  FileCheck,
 } from "lucide-react";
 import { Header } from "./components/Header";
 import { UploadSection } from "./components/UploadSection";
@@ -13,9 +14,10 @@ import { TextTab } from "./components/TextTab";
 import { TablesTab } from "./components/TablesTab";
 import { StructureTab } from "./components/StructureTab";
 import { RawJsonTab } from "./components/RawJsonTab";
+import { CanonicalDocumentTab } from "./components/CanonicalDocumentTab";
 import { ParseApiResponse, RhwpCapabilities, RhwpStatusResponse } from "./types";
 
-type MainTab = "text" | "tables" | "structure" | "json";
+type MainTab = "canonical" | "text" | "tables" | "structure" | "json";
 
 export default function App() {
   const [connected, setConnected] = useState<boolean>(false);
@@ -30,7 +32,7 @@ export default function App() {
   const [parseResult, setParseResult] = useState<ParseApiResponse | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<MainTab>("text");
+  const [activeTab, setActiveTab] = useState<MainTab>("canonical");
 
   // Fetch initial CLI status & capabilities
   useEffect(() => {
@@ -142,6 +144,7 @@ export default function App() {
       }
 
       setParseResult(data as ParseApiResponse);
+      setActiveTab("canonical");
       if (data.rhwp?.version) {
         setRhwpVersion(data.rhwp.version);
       }
@@ -185,6 +188,7 @@ export default function App() {
       }
 
       setParseResult(data as ParseApiResponse);
+      setActiveTab("canonical");
       if (data.rhwp?.version) {
         setRhwpVersion(data.rhwp.version);
       }
@@ -201,6 +205,12 @@ export default function App() {
   };
 
   const tabs: { id: MainTab; label: string; count?: number | string; icon: React.FC<{ className?: string }> }[] = [
+    {
+      id: "canonical",
+      label: "Canonical Document",
+      count: parseResult?.canonical ? "v1.0" : undefined,
+      icon: FileCheck,
+    },
     {
       id: "text",
       label: "전체 텍스트",
@@ -357,6 +367,13 @@ export default function App() {
 
             {/* Tab Panes */}
             <div>
+              {activeTab === "canonical" && (
+                <CanonicalDocumentTab
+                  canonical={parseResult.canonical}
+                  markdown={parseResult.canonical_markdown}
+                  quality={parseResult.quality}
+                />
+              )}
               {activeTab === "text" && (
                 <TextTab textData={parseResult.text} />
               )}
@@ -381,7 +398,7 @@ export default function App() {
       <footer className="mt-auto border-t border-stone-200 bg-white py-4 text-center text-xs text-stone-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <span>
-            HWP/HWPX Parser Quality Verification App • TASK 01
+            HWP/HWPX Canonical Document Builder • TASK 02
           </span>
           <span className="font-mono text-stone-400">
             {connected && rhwpVersion

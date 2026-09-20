@@ -1,6 +1,12 @@
 import { execFile } from "child_process";
 import path from "path";
 import fs from "fs";
+import {
+  buildCanonicalDocument,
+  buildCanonicalMarkdown,
+  buildCanonicalQuality,
+} from "./canonical.ts";
+import { CanonicalDocument, CanonicalQualityReport } from "../src/types.ts";
 
 export interface RhwpCapabilityCommand {
   name: string;
@@ -60,6 +66,10 @@ export interface ParseResponse {
     export_tables: RhwpExecutionResult;
     export_structure: RhwpExecutionResult;
   };
+  canonical?: CanonicalDocument;
+  canonical_markdown?: string;
+  markdown?: string;
+  quality?: CanonicalQualityReport;
 }
 
 export interface RhwpConnectionStatus {
@@ -349,7 +359,7 @@ export async function parseHwpFile(
   // If at least one parsing command succeeded or info succeeded, overall is success
   const success = infoRes.success || textRes.success || tablesRes.success || structureRes.success;
 
-  return {
+  const baseResult = {
     success,
     file: {
       name: originalName,
@@ -371,5 +381,17 @@ export async function parseHwpFile(
       export_tables: tablesRes,
       export_structure: structureRes,
     },
+  };
+
+  const canonicalDoc = buildCanonicalDocument(baseResult);
+  const canonicalMarkdown = buildCanonicalMarkdown(canonicalDoc);
+  const quality = buildCanonicalQuality(baseResult, canonicalDoc, canonicalMarkdown);
+
+  return {
+    ...baseResult,
+    canonical: canonicalDoc,
+    canonical_markdown: canonicalMarkdown,
+    markdown: canonicalMarkdown,
+    quality,
   };
 }
